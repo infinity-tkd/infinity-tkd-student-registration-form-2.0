@@ -41,7 +41,7 @@ import { phnomPenhSchoolNames, phnomPenhSchools } from './data/schools';
 import { relationshipList, relationshipTranslations } from './data/relationships';
 import { i18n } from './data/translations';
 
-const GAS_WEB_APP_URL = "YOUR_GOOGLE_APP_SCRIPT_URL_HERE";
+const GAS_WEB_APP_URL = import.meta.env.VITE_GAS_WEB_APP_URL || "YOUR_GOOGLE_APP_SCRIPT_URL_HERE";
 
 const dayGroups = [
   "Saturday - Sunday",
