@@ -6,23 +6,24 @@ A high-fidelity, premium, and interactive student registration web application b
 
 ## 🚀 Key Features
 
-### 1. Premium Obsidian UI/UX
-* **Obsidian & Frosted Glassmorphism**: Stunning aesthetics built on frosted glass cards, dynamic background gradients, and smooth focus highlights.
+### 1. Refined, Minimalist UI/UX
+* **Calm, readable layout**: Warm neutral surfaces, Infinity red accents, persistent field labels, a desktop progress sidebar, and a compact mobile step tracker.
 * **Responsive Layout**: Fluid layouts designed for mobile, tablet, and desktop viewports.
-* **Dynamic Dark/Light Mode**: Toggle between themes instantly, with dark mode variables supported natively.
-* **Unified Iconography**: Clean icons powered by Phosphor Icons and FontAwesome.
+* **Light mode by default**: An explicit dark mode toggle remembers the user's choice. English, Khmer, and Chinese use self-hosted Geist, Kantumruy Pro, and Noto Sans SC fonts.
+* **Unified Iconography**: Phosphor icons without an external icon stylesheet. Transitions respect reduced-motion preferences.
 
 ### 2. Smart Form Navigation & Logic
 * **5-Step Wizard Progress**: Tracks personal details, emergency info, branch selection, medical questionnaires, and agreement signatures.
 * **Searchable Dropdowns**: Upgraded custom selectors (e.g. nationality, city/province, class times, belts) with full search filtering and keyboard navigation (Arrow Up/Down, Enter, Escape).
 * **School Auto-Filter**: Smart search input that dynamically filters and autocompletes from Phnom Penh schools.
 * **Auto-Scroll to Error**: Clicking "Next Step" or "Submit" with invalid fields automatically scrolls to and focuses the first invalid element.
+* **Review before submission**: Review and edit registration details before accepting policies and signing.
 
 ### 3. Strict Validation & Rules
 * **Minimum Age Policy (6+)**: Enforces that students must be at least 6 years old (ages 6 to 100). The HTML date picker restricts dates dynamically to prevent invalid entries.
 * **Strict Minor Policy**: If a student is under 17, the emergency contact relation is validated to be a Parent or Guardian (supporting multi-language inputs). Submissions are locked until this is met.
-* **Secure Digital Signature**: Requires the student to type their signature matching their Step 1 English Name (case-insensitive and space-insensitive matching).
-* **Keystroke Sanitization & XSS Filtering**: Automatically strips HTML tags on change, blocks non-numeric inputs for phones, heights, weights, and sanitizes character pools.
+* **Typed signature confirmation**: Requires a name matching Step 1, ignoring case and repeated spaces. This is a form confirmation, not identity verification or a cryptographic signature.
+* **Bounded input and safe rendering**: Limits field sizes, validates calendar dates and measurements, filters phone/name characters, and refuses formula-like entries. React renders entries as text; medical comparisons such as `< 5 mg` remain intact.
 
 ### 4. Serverless Google Sheets Database
 * **Direct Web API Integration**: Submits sanitized student entries to a Google Apps Script web app endpoint.
@@ -40,15 +41,16 @@ A high-fidelity, premium, and interactive student registration web application b
 
 * **Frontend Framework**: React 19 (Hooks, Context, state-driven rendering)
 * **Build Tool**: Vite (Fast HMR & asset bundlers)
-* **Styling**: Tailwind CSS v4 (Obsidian theme tokens, custom animations, transitions)
-* **Icon Packs**: `@phosphor-icons/react` & FontAwesome 6.4.0 (CDN)
+* **Styling**: Tailwind CSS v4 and CSS theme tokens, responsive layouts, and reduced-motion transitions
+* **Icons**: `@phosphor-icons/react`
+* **Fonts**: Self-hosted Fontsource variable fonts; Chinese font styles load on language selection
 
 ---
 
 ## 📁 Repository Structure
 
 ```text
-├── Logo/                       # Brand SVG assets, guide guides, and PNG files
+├── public/                     # Brand assets, fonts, manifest, offline fallback
 ├── src/
 │   ├── components/
 │   │   └── SearchableSelect.jsx # Keyboard-friendly custom dropdown selector
@@ -60,8 +62,8 @@ A high-fidelity, premium, and interactive student registration web application b
 │   ├── App.jsx                 # Core wizard controller & form pages
 │   ├── index.css               # Tailwind theme setup and global utilities
 │   └── main.jsx                # DOM entry point
-├── google_apps_script.js       # Production-ready database script
-├── google_sheets_integration.md # Integration & deployment guide
+├── google_apps_script.js       # Existing backend; separate hardening still required
+├── SECURITY_RELIABILITY.md     # Security findings and deployment conditions
 ├── index.html                  # HTML template
 ├── package.json                # Project dependencies and script runner
 └── README.md                   # Repository documentation
@@ -72,7 +74,7 @@ A high-fidelity, premium, and interactive student registration web application b
 ## 💻 Local Setup & Development
 
 ### Prerequisites
-Make sure you have [Node.js](https://nodejs.org) (v18 or higher) and `npm` installed.
+Use a supported [Node.js LTS release](https://nodejs.org/en/about/previous-releases) and `npm`. Node 24 LTS is used in deployment; Node 22.13+ also meets the installed tooling's requirements.
 
 ### 1. Clone the Repository
 ```bash
@@ -89,13 +91,15 @@ npm install
 ```bash
 npm run dev
 ```
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173) in your browser. Keep the server running; opening the source `index.html` with a `file://` URL does not run a Vite application.
 
 ### 4. Build for Production
 ```bash
 npm run build
 ```
-This compiles optimized HTML, CSS, and JS assets into the `dist/` folder, ready for hosting.
+This compiles optimized HTML, CSS, and JS assets into `dist/`. Configure the endpoint first. See the production conditions below before collecting real registrations.
+
+Use `npm run preview` to inspect the build over HTTP at `http://127.0.0.1:4173`. Service-worker offline reopening is enabled in this production preview and HTTPS deployments, rather than the development server.
 
 ---
 
@@ -107,10 +111,19 @@ To hook the form to your Google Sheet:
 3. Click **Deploy** -> **New Deployment**. Select **Web App**.
    * Execute as: **Me**
    * Who has access: **Anyone**
-4. Deploy, copy the **Web App URL**, and paste it inside [src/App.jsx](src/App.jsx) at line 44:
-   ```javascript
-   const GAS_WEB_APP_URL = "YOUR_DEPLOYED_URL_HERE";
+4. Deploy, copy the public **Web App URL**, and configure it in an ignored `.env.local` file:
+   ```dotenv
+   VITE_GAS_WEB_APP_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
    ```
-5. Run `npm run build` and publish your build.
+5. For GitHub Pages, set the repository Actions variable `VITE_GAS_WEB_APP_URL` to the same public URL. The local `.env.local` is not committed or copied into GitHub Actions.
+6. Run `npm run build` and publish your build.
 
-For detailed steps, refer to [google_sheets_integration.md](google_sheets_integration.md).
+The endpoint URL is public frontend configuration, not a secret. See [SECURITY_RELIABILITY.md](SECURITY_RELIABILITY.md) for security policies, hosting limits, browser draft recovery, offline behavior, and verification commands.
+
+## Production verification
+
+Run `npm run check` for frontend/tooling lint, isolated reliability tests and a production build. Browser verification uses `npm run test:frontend`, `npm run test:offline`, and `npm run test:serving` with Playwright and installed Chrome; every registration POST is intercepted. The offline suite covers actual service workers, tab reopening and version updates. The serving suite checks Vite's production response headers and a simulated Google redirect through the browser. Set `PLAYWRIGHT_MODULE` when using a shared Playwright installation and `FRONTEND_ARTIFACT_DIR` to select a report directory.
+
+The frontend checks do not certify the deployed API. Live write tests were declined and no test registrations were created. Server validation, safe spreadsheet writes and idempotency remain necessary in the unchanged backend. GitHub Pages applies the HTML meta CSP but does not consume the emitted custom `_headers` file; use hosting/proxy configuration to enforce all response headers. Set the repository Actions variable `VITE_GAS_WEB_APP_URL` before deploying.
+
+Repository-wide `npm run lint` also recognizes Apps Script and Node environments. Its remaining warning identifies the existing backend's unused CORS configuration; it is documented rather than treated as a working CORS control.
