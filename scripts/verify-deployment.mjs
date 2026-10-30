@@ -44,7 +44,7 @@ if (!siteArg || !apiArg) {
     assert.ok(appCode.includes(api.href), "Built app points to a different API endpoint");
     const health = await get(api);
     assert.match(health.headers.get("content-type") || "", /application\/json/);
-    assert.deepEqual(await health.json(), { status: "ok", service: "infinity-registration", version: "2026-10-30.1", ready: true });
+    assert.deepEqual(await health.json(), { status: "ok", service: "infinity-registration", version: "2026-10-30.2", ready: true });
     console.log(`PASS HTTPS, all security headers, ${count} assets, worker caching, configured API and backend revision; no live writes`);
   } catch (error) {
     console.error(`DEPLOYMENT NOT VERIFIED: ${error.message}`);

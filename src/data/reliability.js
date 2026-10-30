@@ -29,6 +29,8 @@ export const reliabilityCopy = {
       "Registration is temporarily unavailable. Your entries are kept here. Please contact our team.",
     rejected:
       "The school could not accept this submission. Your entries are kept here. Please review them or contact our team.",
+    reviewSubmission: "Your registration was not saved. Please review your details and required agreements, then try again. Your draft is still here.",
+    busy: "Registration is busy or has reached a temporary request limit. Your registration was not saved. Please wait and try again, or contact our team.",
     offlineSubmit:
       "Please reconnect before submitting. Your entries are kept here.",
     recoverError: "Something interrupted the page",
@@ -67,6 +69,8 @@ export const reliabilityCopy = {
       "ការចុះឈ្មោះមិនអាចប្រើបានជាបណ្ដោះអាសន្ន។ ព័ត៌មានរបស់អ្នកនៅទីនេះ។ សូមទាក់ទងក្រុមការងារ។",
     rejected:
       "សាលាមិនអាចទទួលការបញ្ជូននេះបានទេ។ ព័ត៌មានរបស់អ្នកនៅដដែល។ សូមពិនិត្យ ឬទាក់ទងក្រុមការងារ។",
+    reviewSubmission: "ការចុះឈ្មោះមិនទាន់បានរក្សាទុកទេ។ សូមពិនិត្យព័ត៌មាន និងការយល់ព្រមដែលចាំបាច់ រួចសាកល្បងម្ដងទៀត។ សេចក្តីព្រាងនៅដដែល។",
+    busy: "សេវាចុះឈ្មោះកំពុងរវល់ ឬបានដល់កម្រិតសំណើបណ្ដោះអាសន្ន។ ការចុះឈ្មោះមិនទាន់បានរក្សាទុកទេ។ សូមរង់ចាំហើយសាកល្បងម្ដងទៀត ឬទាក់ទងក្រុមការងារ។",
     offlineSubmit: "សូមភ្ជាប់អ៊ីនធឺណិតមុនពេលបញ្ជូន។ ព័ត៌មានរបស់អ្នកនៅដដែល។",
     recoverError: "មានបញ្ហាធ្វើឱ្យទំព័រផ្អាក",
     recoverErrorText:
@@ -101,6 +105,8 @@ export const reliabilityCopy = {
     configuration:
       "注册服务暂时不可用，你填写的信息仍保留在此页面。请联系团队。",
     rejected: "学校未能接受此次提交。你填写的信息仍然保留，请核对或联系团队。",
+    reviewSubmission: "注册尚未保存。请核对信息和必需的同意事项后重试，草稿仍然保留。",
+    busy: "注册服务繁忙或已达到临时请求上限，注册尚未保存。请稍后重试或联系团队。",
     offlineSubmit: "请重新联网后再提交，你填写的信息仍然保留。",
     recoverError: "页面遇到了问题",
     recoverErrorText:

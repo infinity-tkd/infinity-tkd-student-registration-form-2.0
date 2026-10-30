@@ -1,97 +1,12 @@
-// Entirely in-memory Apps Script/Sheets simulator. No HTTP, Google, or live data.
 import assert from "node:assert/strict";
-import { createContext, runInContext } from "node:vm";
-import { readFileSync } from "node:fs";
-import { createHmac, randomUUID } from "node:crypto";
+import { backendHarness, validRegistration, event } from "./helpers/backend-harness.mjs";
 
-const source = readFileSync("google_apps_script.js", "utf8");
-export const validRegistration = {
-  englishName: "Contract Test", khmerName: "សុខ ដារ៉ា", gender: "Male", dob: "2000-01-15",
-  phone: "012345678", email: "test@example.com", height: "175", weight: "65",
-  nationality: "Cambodian", address: "Example Street", country: "Cambodia", city: "Phnom Penh Capital",
-  district: "Boeng Keng Kang", commune: "Olympic", school: "", emergencyContact: "陈 明",
-  emergencyPhone: "012345678", relationship: "Parent", medicalNotes: "", allergies: "", migrationNotes: "",
-  branch: "Olympic", schedule: "Saturday - Sunday 9:00 - 11:00 AM", belt: "White",
-  medicalConditions: "None", medications: "None", pastInjuries: "None", otherSports: "None",
-  liabilityWaiver: "Agreed", privacyPolicy: "Agreed", mediaPrivacy: "Agreed", parentConsent: "N/A",
-  howHear: "Facebook", signature: "Contract Test",
-};
-function event(data) {
-  const contents = new URLSearchParams(data).toString();
-  return { parameter: { ...data }, parameters: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, [value]])), postData: { contents, length: contents.length, type: "application/x-www-form-urlencoded" } };
-}
-export function backendHarness({ blank = false } = {}) {
-  const properties = new Map([["REGISTRATION_SPREADSHEET_ID", "isolated-test-spreadsheet"]]);
-  const rows = [];
-  const formats = [];
-  const state = { locked: false, sheet: !blank, calls: 0, writes: 0, fail: "", frozen: 0, maxRows: 1000, now: Date.UTC(2026, 9, 30, 6) };
-  class Clock extends Date { constructor(...args) { super(...(args.length ? args : [state.now])); } static now() { return state.now; } }
-  const store = {
-    getProperty: key => properties.get(key) ?? null,
-    getProperties: () => Object.fromEntries(properties),
-    deleteProperty: key => properties.delete(key),
-    setProperty(key, value) {
-      if (state.fail === "reserve" && value.includes('"pending"')) throw new Error("Private storage error");
-      if (state.fail === "commit" && value.includes('"committed"')) throw new Error("Private receipt error");
-      properties.set(key, value);
-    },
-    setProperties: values => { for (const [key, value] of Object.entries(values)) properties.set(key, value); },
-  };
-  function range(row, col, height, width) {
-    assert.equal(height, 1);
-    const read = () => Array.from({ length: width }, (_, i) => rows[row - 1]?.[col - 1 + i] ?? "");
-    return {
-      getValues: () => [read()],
-      getFormulas: () => [read().map(v => typeof v === "string" && v.startsWith("=") ? v : "")],
-      isBlank: () => read().every(v => v === ""),
-      setNumberFormat(value) { formats.push({ row, col, width, value }); },
-      setValues(values) {
-        assert.ok(state.locked, "Every sheet write requires the script lock");
-        assert.equal(values.length, 1);
-        assert.equal(values[0].length, width);
-        if (row > 1 && state.fail === "before") throw new Error("Private failure before write");
-        if (state.onWrite && row > 1) { const hook = state.onWrite; state.onWrite = null; hook(); }
-        rows[row - 1] ??= [];
-        values[0].forEach((v, i) => { rows[row - 1][col - 1 + i] = v; });
-        state.writes++;
-        if (row > 1 && state.fail === "after") throw new Error("Private failure after write");
-      },
-    };
-  }
-  const sheet = { getRange: range, getSheetId: () => 42, getLastRow: () => rows.length, setFrozenRows: n => { state.frozen = n; }, getMaxRows: () => state.maxRows, insertRowsAfter: (_row, count) => { state.maxRows += count; } };
-  const context = createContext({
-    Date: Clock,
-    Utilities: {
-      Charset: { UTF_8: "UTF-8" }, getUuid: randomUUID,
-      computeHmacSha256Signature: (text, key) => Array.from(createHmac("sha256", key).update(text).digest()),
-      formatDate: () => new Date(state.now).toISOString().slice(0, 10),
-    },
-    SpreadsheetApp: {
-      getActiveSpreadsheet() { throw new Error("No active spreadsheet in a web app"); },
-      openById(id) { assert.equal(id, "isolated-test-spreadsheet"); state.calls++; return {
-        getId: () => "isolated-test-spreadsheet", getSheetByName: () => state.sheet ? sheet : null,
-        insertSheet: () => { state.sheet = true; return sheet; },
-      }; },
-      flush() { if (state.fail === "flush") throw new Error("Private flush error"); },
-    },
-    PropertiesService: { getScriptProperties: () => store },
-    LockService: { getScriptLock: () => ({
-      tryLock() { if (state.locked || state.fail === "lock") return false; state.locked = true; return true; },
-      releaseLock() { state.locked = false; },
-    }) },
-    ContentService: { MimeType: { JSON: "application/json" }, createTextOutput: text => ({ setMimeType: () => text }) },
-  });
-  runInContext(source, context);
-  const headers = ["Timestamp", ...context.REGISTRATION_FIELDS.map(field => field[1])];
-  if (!blank) rows.push(headers, Array(35).fill("EXISTING RECORD MUST STAY UNCHANGED"));
-  return { context, rows, properties, state, formats, request(data = validRegistration) { return JSON.parse(context.doPost(event(data))); }, raw: e => JSON.parse(context.doPost(e)) };
-}
 let cases = 0;
 function test(name, run) { run(); cases++; console.log("PASS", name); }
 
 test("health GET is read-only and contains no registration data", () => {
   const h = backendHarness();
-  assert.deepEqual(JSON.parse(h.context.doGet()), { status: "ok", service: "infinity-registration", version: "2026-10-30.1", ready: true });
+  assert.deepEqual(JSON.parse(h.context.doGet()), { status: "ok", service: "infinity-registration", version: "2026-10-30.2", ready: true });
   assert.equal(h.state.calls, 1); assert.equal(h.properties.size, 1); assert.equal(h.state.writes, 0);
   h.rows[0][1] = "Unexpected header";
   assert.equal(JSON.parse(h.context.doGet()).ready, false);
@@ -105,9 +20,9 @@ test("original 34-field/35-column contract and historic rows retained", () => {
   assert.deepEqual(Object.keys(validRegistration), Array.from(h.context.REGISTRATION_FIELDS, f => f[0]));
   assert.equal(h.request().status, "success");
   assert.deepEqual(h.rows.slice(0, 2), original);
-  assert.equal(h.rows[2].length, 35); assert.equal(h.rows[2][7], "175"); assert.equal(h.rows[2][8], "65");
+  assert.equal(h.rows[2].length, 35); assert.equal(h.rows[2][7], 175); assert.equal(h.rows[2][8], 65);
   assert.equal(h.rows[2][22], "Olympic"); assert.equal(h.rows[2][29], "Agreed");
-  assert.ok(h.formats.every(f => f.row > 2 && f.value === "@"));
+  assert.equal(h.formats.length, 0);
 });
 test("required fields, lengths, calendar dates, enums, measurements, signatures and consent reject before storage", () => {
   const mutations = [
@@ -115,7 +30,7 @@ test("required fields, lengths, calendar dates, enums, measurements, signatures 
     { dob: "2000-02-31" }, { dob: "2025-01-01" }, { dob: "1900-01-01" }, { gender: "unknown" },
     { height: "NaN" }, { height: "231" }, { weight: "19" }, { weight: "2e2" },
     { email: "bad" }, { phone: "123" }, { emergencyPhone: "123" }, { belt: "invented" },
-    { branch: "unknown" }, { schedule: "wrong" }, { relationship: "invented" }, { howHear: "invented" },
+    { branch: "unknown" }, { schedule: "wrong" }, { relationship: "" }, { howHear: "invented" },
     { liabilityWaiver: "No" }, { privacyPolicy: "true" }, { mediaPrivacy: "No" }, { parentConsent: "bad" },
     { signature: "Other Name" }, { medicalNotes: "private\u0000text" }, { city: "" }, { unknown: "value" },
   ];
@@ -135,17 +50,19 @@ test("minor consent, age boundaries, international addresses and canonical sched
   assert.equal(h.context.registrationAge_("2020-10-30", "2026-10-30"), 6);
   assert.equal(h.context.registrationAge_("2020-10-31", "2026-10-30"), 5);
   assert.equal(h.context.registrationAge_("1926-10-30", "2026-10-30"), 100);
-  for (const changes of [{ parentConsent: "No" }, { relationship: "Friend", parentConsent: "Agreed" }])
+  for (const changes of [{ parentConsent: "No" }, { parentConsent: "N/A" }])
     assert.equal(h.request({ ...validRegistration, dob: "2015-01-15", ...changes }).status, "error");
   assert.equal(h.request({ ...validRegistration, dob: "2015-01-15", parentConsent: "Agreed" }).status, "success");
+  for (const relationship of ["Aunt", "Teacher", "Coach", "Other trusted adult", "亲属", "មីង"])
+    assert.equal(backendHarness().request({ ...validRegistration, dob: "2015-01-15", parentConsent: "Agreed", relationship }).status, "success");
   for (const schedule of ["Saturday - Sunday: 9:30 - 11:30 AM", "Tuesday - Wednesday: 6:00 - 8:00 PM (General)"])
     assert.equal(backendHarness().request({ ...validRegistration, country: "China", city: "", district: "", commune: "", branch: "KoukKhleang", schedule }).status, "success");
 });
 test("formula payloads become literal text; Unicode, medical comparisons and phone zeroes survive", () => {
   for (const medicalNotes of ['=IMPORTXML("https://evil.test")', "+cmd", "-command", "@SUM(1)", "'=formula", "ខ្មែរ 中文 < 5 mg > 2 hours"]) {
     const h = backendHarness(); assert.equal(h.request({ ...validRegistration, medicalNotes }).status, "success");
-    const stored = h.rows[2][19]; assert.ok(!stored.startsWith("="));
-    assert.ok(stored === medicalNotes || stored === "'" + medicalNotes);
+    const stored = h.rows[2][19]; assert.equal(h.formulas.size, 0);
+    assert.equal(stored, medicalNotes);
     assert.equal(h.rows[2][5], "012345678"); assert.equal(h.rows[2][16], "陈 明");
   }
 });
@@ -199,6 +116,7 @@ test("contact/global throttles, pause switch, schema mismatch and capacity fail 
 });
 test("first-use initializes only the new registration tab; no sheet deletion API exists", () => {
   const h = backendHarness({ blank: true }); assert.equal(h.request().status, "success");
+  assert.equal(h.state.maxColumns, 35);
   assert.equal(h.rows.length, 2); assert.equal(h.rows[0].length, 35); assert.equal(h.state.frozen, 1);
 });
 test("full sheets grow without rewriting records; expired committed receipts and rate counters are bounded", () => {
@@ -212,5 +130,36 @@ test("full sheets grow without rewriting records; expired committed receipts and
 test("internal exception details never appear in API responses", () => {
   const h = backendHarness(); h.state.fail = "before"; const response = h.request();
   assert.ok(!JSON.stringify(response).includes("Private")); assert.equal(response.code, "unavailable");
+});
+test("pre-write rejections are certain; attempted writes and old pending receipts remain uncertain", () => {
+  const invalid = backendHarness().request({ ...validRegistration, englishName: "" });
+  assert.equal(invalid.uncertain, false);
+  const format = backendHarness(); format.state.fail = "format";
+  assert.equal(format.request().status, "success"); // Typed-column formatting is never invoked.
+  assert.equal(format.formats.length, 0);
+  const attempted = backendHarness(); attempted.state.fail = "after";
+  assert.equal(attempted.request().uncertain, true);
+  const pending = backendHarness(); pending.state.fail = "before";
+  assert.equal(pending.request().uncertain, true);
+  pending.state.fail = ""; assert.equal(pending.request().uncertain, true);
+});
+test("operator repair releases only old, verified empty reservations and preserves rate limits for exact retry", () => {
+  const h = backendHarness(); h.state.fail = "before";
+  assert.equal(h.request().uncertain, true);
+  h.context.releaseUnwrittenAttempts();
+  assert.ok(Array.from(h.properties.values()).some(value => value.includes('"state":"pending"')));
+  h.state.now += 11 * 60 * 1000;
+  const rowsBefore = structuredClone(h.rows);
+  h.context.releaseUnwrittenAttempts();
+  assert.deepEqual(h.rows, rowsBefore);
+  assert.ok(Array.from(h.properties.values()).some(value => value.includes('"state":"retryable"')));
+  for (const [key,value] of h.properties) if (key.includes("RATE_")) {
+    const counter = JSON.parse(value); counter.count = 100; h.properties.set(key,JSON.stringify(counter));
+  }
+  h.state.fail = ""; assert.equal(h.request().status, "success");
+  assert.equal(h.request().duplicate, true); assert.equal(h.rows.length,3);
+  const occupied = backendHarness(); occupied.state.fail = "after"; occupied.request(); occupied.state.now += 11 * 60 * 1000;
+  occupied.context.releaseUnwrittenAttempts();
+  assert.ok(Array.from(occupied.properties.values()).some(value => value.includes('"state":"pending"')));
 });
 console.log(`PASS ${cases} backend security scenarios; zero live requests`);

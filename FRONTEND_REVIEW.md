@@ -33,7 +33,7 @@ Run `npm run build` and `npm run lint:frontend` for production compilation and f
 The browser checks cover:
 
 - Complete English desktop, Khmer phone, and Chinese tablet registration workflows, including minors and both branches.
-- Required fields, missing/out-of-range height and weight, address cascades, school custom entries, schedule resets, signature matching, guardian-only choices, parent consent, editing review details, and reset after success.
+- Required fields, missing/out-of-range height and weight, address cascades, school custom entries, schedule resets, signature matching, expanded emergency relationships, separate parent consent, editing review details, and reset after success.
 - Successful responses, server errors, network failures, and preserved entries for retry.
 - Dropdown search, arrows, Enter, Escape, Tab, active-descendant behavior, and no-results feedback.
 - Dialog keyboard focus, Escape dismissal, and language/theme persistence.
@@ -50,3 +50,5 @@ The 17 October follow-up also verifies worker updates without forcing an active 
 ## 30 October security follow-up
 
 The backend is now hardened and deployed as Version 3. The 16/17 October notes above describe the earlier frontend-only scope. The current release conditions, tests and hosting status are documented in SECURITY_RELIABILITY.md and BACKEND_DEPLOYMENT.md. Browser payload fields and UI behavior are preserved; backend security scenarios run separately in the mandatory check command. Custom response headers still require deployment to a compatible host.
+
+The submission follow-up deploys Version 4 (2026-10-30.2). All students now have 18 translated emergency relationship choices plus custom text, while under-17 parent/guardian consent stays required. Successful intercepted browser submissions run through the actual backend handler in a grid-aware isolated harness. Confirmed pre-write errors no longer display the uncertain/duplicate warning. Native date, numeric and escaped-text writes passed in an isolated Google spreadsheet. Five old reservations were confirmed blank and released through operator bookkeeping repair; no registration rows were changed. CSP was not weakened for antivirus-injected styles or fonts.

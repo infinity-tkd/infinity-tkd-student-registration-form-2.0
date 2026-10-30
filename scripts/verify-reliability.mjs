@@ -12,6 +12,7 @@ import { securityHeaders, securityPolicy } from "../build/security.mjs";
 import { ageOnDate } from "../src/utils/dates.js";
 import { reliabilityCopy } from "../src/data/reliability.js";
 import { readFileSync } from "node:fs";
+import { relationshipList, relationshipTranslations } from "../src/data/relationships.js";
 
 const today = new Date(2026, 9, 16);
 assert.equal(ageOnDate("2020-10-16", today), 6);
@@ -27,6 +28,10 @@ for (const language of ["km", "zh"])
     Object.keys(reliabilityCopy.en).sort(),
   );
 console.log("PASS calendar dates, exact age boundaries, and trilingual recovery copy");
+assert.ok(relationshipList.length >= 18);
+for (const language of ["en", "km", "zh"])
+  for (const relationship of relationshipList) assert.ok(relationshipTranslations[language][relationship]);
+console.log("PASS expanded emergency relationship translation coverage");
 
 const values = new Map();
 globalThis.localStorage = {
@@ -159,6 +164,15 @@ await assert.rejects(
   (error) =>
     error.code === "rejected" && error.uncertain && !error.message.includes("Private"),
 );
+
+for (const code of ["invalid_fields", "consent_required", "busy", "configuration", "unavailable"]) {
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ status: "error", code, uncertain: false }) });
+  await assert.rejects(submitRegistration(endpoint, {}), error => error.code === "rejected" && error.uncertain === false && error.serverCode === code);
+}
+globalThis.fetch = async () => ({ ok: true, json: async () => ({ status: "error", code: "write_uncertain", uncertain: false }) });
+await assert.rejects(submitRegistration(endpoint, {}), error => error.uncertain === true);
+globalThis.fetch = async () => ({ ok: true, json: async () => ({ status: "error", code: "unknown", uncertain: false }) });
+await assert.rejects(submitRegistration(endpoint, {}), error => error.uncertain === true);
 globalThis.fetch = async () => {
   throw new TypeError("Network failure");
 };

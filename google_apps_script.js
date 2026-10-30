@@ -4,7 +4,7 @@
  * No migration, deletion, backfill, or rewrite of existing registrations occurs.
  * See BACKEND_DEPLOYMENT.md. Never test doPost against production.
  */
-var REGISTRATION_VERSION = "2026-10-30.1";
+var REGISTRATION_VERSION = "2026-10-30.2";
 // Original field order: 34 request fields, 35 sheet columns including timestamp.
 var REGISTRATION_FIELDS = [
   ["englishName", "English Name", 160, true],
@@ -86,6 +86,33 @@ function doGet() {
   return registrationJson_({ status: ready ? "ok" : "error", service: "infinity-registration", version: REGISTRATION_VERSION, ready: ready });
 }
 
+// Operator diagnostic: metadata only, no registration values or writes.
+function checkRegistrationSetup() {
+  var properties = PropertiesService.getScriptProperties();
+  var sheet = registrationSpreadsheet_(properties).getSheetByName("Registrations");
+  var receipts = { pending: 0, committed: 0 };
+  var pendingRows = [];
+  var all = properties.getProperties();
+  Object.keys(all).forEach(function (key) {
+    if (key.indexOf(REGISTRATION_PREFIX + "RECEIPT_") !== 0) return;
+    var receipt = JSON.parse(all[key]);
+    if (Object.prototype.hasOwnProperty.call(receipts, receipt.state)) receipts[receipt.state]++;
+    if (receipt.state === "pending" && pendingRows.indexOf(receipt.row) < 0) pendingRows.push(receipt.row);
+  });
+  var layout = null;
+  if (sheet && sheet.getMaxColumns() >= REGISTRATION_FIELDS.length + 1) {
+    var next = sheet.getRange(sheet.getLastRow() + 1, 1, 1, REGISTRATION_FIELDS.length + 1);
+    layout = { blank: next.isBlank(), formats: next.getNumberFormats()[0],
+      validation: next.getDataValidations()[0].map(function (rule) { return rule ? { type: String(rule.getCriteriaType()), allowsInvalid: rule.getAllowInvalid() } : null; }),
+      blockedSheetProtection: sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).some(function (protection) { return !protection.canEdit(); }),
+      blockedRangeProtection: sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE).some(function (protection) { return !protection.canEdit(); }) };
+  }
+  console.info(JSON.stringify({ version: REGISTRATION_VERSION, sheetExists: !!sheet,
+    columns: sheet ? sheet.getMaxColumns() : null, lastRow: sheet ? sheet.getLastRow() : null,
+    hasHashKey: !!properties.getProperty(REGISTRATION_PREFIX + "HASH_KEY"), receipts: receipts,
+    pendingRows: pendingRows.map(function (row) { return { row: row, blank: sheet.getRange(row, 1, 1, REGISTRATION_FIELDS.length + 1).isBlank() }; }), layout: layout }));
+}
+
 function registrationAge_(value, today) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return NaN;
   var date = new Date(value + "T12:00:00Z");
@@ -138,8 +165,7 @@ function registrationValidate_(event) {
     throw registrationFailure_("invalid_fields");
   var age = registrationAge_(data.dob, today);
   if (!Number.isFinite(age) || age < 6 || age > 100) throw registrationFailure_("invalid_fields");
-  if (["Parent", "Guardian", "Sibling", "Relative", "Spouse", "Friend", "Other"].indexOf(data.relationship) < 0 ||
-      ["White", "Yellow", "Green", "Blue", "Red", "Black"].indexOf(data.belt) < 0 ||
+  if (["White", "Yellow", "Green", "Blue", "Red", "Black"].indexOf(data.belt) < 0 ||
       ["Facebook", "TikTok", "Google", "Friend/Family", "Banner/Flyer", "Other"].indexOf(data.howHear) < 0)
     throw registrationFailure_("invalid_fields");
   var validSchedule = data.branch === "Olympic" && data.schedule === "Saturday - Sunday 9:00 - 11:00 AM";
@@ -158,7 +184,7 @@ function registrationValidate_(event) {
     if (data[key] !== "Agreed") throw registrationFailure_("consent_required");
   });
   if (age < 17) {
-    if (["Parent", "Guardian"].indexOf(data.relationship) < 0 || data.parentConsent !== "Agreed")
+    if (data.parentConsent !== "Agreed")
       throw registrationFailure_("consent_required");
   } else if (["N/A", "No", "Agreed"].indexOf(data.parentConsent) < 0) {
     throw registrationFailure_("invalid_fields");
@@ -170,7 +196,16 @@ function registrationValidate_(event) {
 
 // Escape formulas / CSV-active prefixes even when browser checks are bypassed.
 function registrationCell_(value) {
-  return /^[\s\uFEFF]*[=+\-@']/.test(value) ? "'" + value : value;
+  return /^[\s\uFEFF]*[=+\-@']/.test(value) || /^0\d/.test(value) ? "'" + value : value;
+}
+
+function registrationSheetValues_(values, timeZone) {
+  return values.map(function (value, index) {
+    var key = REGISTRATION_FIELDS[index][0];
+    if (key === "dob") return Utilities.parseDate(value, timeZone, "yyyy-MM-dd");
+    if (key === "height" || key === "weight") return Number(value);
+    return registrationCell_(value);
+  });
 }
 
 function registrationDigest_(value, secret) {
@@ -213,17 +248,50 @@ function registrationThrottle_(properties, data, secret, now) {
   properties.setProperties(updates, false);
 }
 
-function registrationMatches_(range, values) {
+function registrationMatches_(range, values, timeZone) {
   var formulas = range.getFormulas()[0];
   var row = range.getValues()[0];
   return values.every(function (value, index) {
+    var key = REGISTRATION_FIELDS[index][0];
+    if (!formulas[index] && key === "dob" && Object.prototype.toString.call(row[index]) === "[object Date]")
+      return Utilities.formatDate(row[index], timeZone, "yyyy-MM-dd") === value;
+    if (!formulas[index] && (key === "height" || key === "weight")) return Number(row[index]) === Number(value);
     return !formulas[index] && (String(row[index]) === value || String(row[index]) === registrationCell_(value));
   });
+}
+
+// Operator-only repair of bookkeeping, never registration rows. Preserve the
+// receipt; release only a blank reservation from an execution older than ten
+// minutes. Exact retries retain their already-charged rate allowance.
+function releaseUnwrittenAttempts() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) throw registrationFailure_("busy");
+  try {
+    var properties = PropertiesService.getScriptProperties();
+    var sheet = registrationSpreadsheet_(properties).getSheetByName("Registrations");
+    var all = properties.getProperties(), released = 0, now = Date.now();
+    Object.keys(all).forEach(function (key) {
+      if (key.indexOf(REGISTRATION_PREFIX + "RECEIPT_") !== 0) return;
+      var receipt = JSON.parse(all[key]);
+      if (receipt.state !== "pending" || receipt.sheet !== sheet.getSheetId() ||
+          now - (receipt.expires - REGISTRATION_RECEIPT_TTL) < 10 * 60 * 1000 ||
+          receipt.row <= sheet.getLastRow() ||
+          !sheet.getRange(receipt.row, 1, 1, REGISTRATION_FIELDS.length + 1).isBlank()) return;
+      receipt.previousState = receipt.state;
+      receipt.state = "retryable";
+      receipt.checkedAt = now;
+      receipt.expires = now + REGISTRATION_RECEIPT_TTL;
+      properties.setProperty(key, JSON.stringify(receipt));
+      released++;
+    });
+    console.info(JSON.stringify({ verifiedBlankReservationsReleased: released, registrationRowsModified: 0 }));
+  } finally { lock.releaseLock(); }
 }
 
 function doPost(event) {
   var lock;
   var locked = false;
+  var uncertain = false;
   try {
     // Invalid requests never reach sheet, properties, or lock services.
     var data = registrationValidate_(event);
@@ -246,22 +314,31 @@ function doPost(event) {
     var receiptKey = REGISTRATION_PREFIX + "RECEIPT_" + registrationDigest_(JSON.stringify([spreadsheet.getId(), values]), secret);
     var previous = properties.getProperty(receiptKey);
     var sheet = spreadsheet.getSheetByName("Registrations");
+    var retryable = previous && JSON.parse(previous).state === "retryable";
+    var timeZone = spreadsheet.getSpreadsheetTimeZone();
     if (previous) {
       var receipt = JSON.parse(previous);
       if (!sheet || receipt.sheet !== sheet.getSheetId()) throw registrationFailure_("write_uncertain");
+    }
+    if (previous && !retryable) {
+      uncertain = true;
       if (receipt.state === "committed") return registrationJson_({ status: "success", duplicate: true });
-      if (!registrationMatches_(sheet.getRange(receipt.row, 2, 1, values.length), values))
+      if (!registrationMatches_(sheet.getRange(receipt.row, 2, 1, values.length), values, timeZone))
         throw registrationFailure_("write_uncertain");
       receipt.state = "committed";
       receipt.expires = now + REGISTRATION_RECEIPT_TTL;
       properties.setProperty(receiptKey, JSON.stringify(receipt));
       return registrationJson_({ status: "success", duplicate: true });
     }
-    registrationThrottle_(properties, data, secret, now);
+    if (!retryable) registrationThrottle_(properties, data, secret, now);
     var headers = registrationHeaders_();
     if (!sheet) sheet = spreadsheet.insertSheet("Registrations");
     var lastRow = sheet.getLastRow();
     if (lastRow === 0) {
+      // New Sheets tabs can have 26 columns; this schema needs 35. Grow the
+      // empty grid before requesting a wider range, without changing records.
+      var columns = sheet.getMaxColumns();
+      if (columns < headers.length) sheet.insertColumnsAfter(columns, headers.length - columns);
       sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
       sheet.setFrozenRows(1);
       lastRow = 1;
@@ -277,14 +354,16 @@ function doPost(event) {
     // Persist BEFORE writing. On a crash, retry inspects this row instead of
     // appending blindly. A pending blank/mismatched row requires manual review.
     properties.setProperty(receiptKey, JSON.stringify(pending));
-    sheet.getRange(row, 2, 1, values.length).setNumberFormat("@");
-    target.setValues([[new Date()].concat(values.map(registrationCell_))]);
+    uncertain = true;
+    // Preserve column/table formats. Native dates/numbers and escaped literal
+    // text retain values without a fragile bulk number-format change.
+    target.setValues([[new Date()].concat(registrationSheetValues_(values, timeZone))]);
     SpreadsheetApp.flush();
     pending.state = "committed";
     try { properties.setProperty(receiptKey, JSON.stringify(pending)); } catch { /* Pending receipt still protects retries. */ }
     return registrationJson_({ status: "success" });
   } catch (error) {
-    return registrationJson_({ status: "error", code: error.registrationCode || "unavailable", message: "Registration could not be completed. Please try again later or contact our team." });
+    return registrationJson_({ status: "error", code: error.registrationCode || "unavailable", uncertain: uncertain || error.registrationCode === "write_uncertain", message: "Registration could not be completed. Please try again later or contact our team." });
   } finally {
     if (locked) {
       try { lock.releaseLock(); } catch { /* Preserve known result. */ }

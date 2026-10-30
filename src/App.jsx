@@ -713,19 +713,7 @@ export default function App() {
       return val === true;
     }
     if (name === "relationship") {
-      if (!val) return false;
-      if (isUnder17) {
-        const lower = val.trim().toLowerCase();
-        return (
-          lower === "parent" ||
-          lower === "guardian" ||
-          lower === "ឪពុកម្តាយ" ||
-          lower === "អាណាព្យាបាល" ||
-          lower === "父母" ||
-          lower === "监护人"
-        );
-      }
-      return true;
+      return !!val;
     }
 
     // List of required fields
@@ -853,21 +841,6 @@ export default function App() {
     }
     if (name === "parentConsent" && isUnder17) {
       if (!val) return t("err_required");
-    }
-    if (name === "relationship" && val) {
-      if (isUnder17) {
-        const lower = val.trim().toLowerCase();
-        const isParentOrGuardian =
-          lower === "parent" ||
-          lower === "guardian" ||
-          lower === "ឪពុកម្តាយ" ||
-          lower === "អាណាព្យាបាល" ||
-          lower === "父母" ||
-          lower === "监护人";
-        if (!isParentOrGuardian) {
-          return t("warn_under17_emergency");
-        }
-      }
     }
 
     if (!validateField(name)) return t("err_required");
@@ -1229,6 +1202,11 @@ export default function App() {
       }
     } catch (error) {
       const uncertain = error.uncertain === true;
+      // Diagnostic codes only: never log names, contact details or health data.
+      console.warn("Registration request failed", {
+        code: error.serverCode || error.code || "unknown",
+        uncertain,
+      });
       setSubmissionUncertain(uncertain);
       draft.flush({ submissionUncertain: uncertain });
       setShowModal({
@@ -1240,7 +1218,13 @@ export default function App() {
             ? reliability.configuration
             : error.code === "offline"
               ? reliability.offlineSubmit
-              : reliability.rejected,
+              : ["invalid_fields", "consent_required", "invalid_request"].includes(error.serverCode)
+                ? reliability.reviewSubmission
+                : ["rate_limited", "busy"].includes(error.serverCode)
+                  ? reliability.busy
+                  : error.serverCode
+                    ? reliability.configuration
+                    : reliability.rejected,
         type: uncertain ? "uncertain" : "error",
       });
     } finally {
@@ -1892,11 +1876,11 @@ export default function App() {
                         {select(
                           "relationship",
                           t("ph_relationship"),
-                          isUnder17 ? ["Parent", "Guardian"] : relationshipList,
+                          relationshipList,
                           {
                             icon: Users,
                             getLabel: getRelationshipLabel,
-                            allowCustomValue: !isUnder17,
+                            allowCustomValue: true,
                           },
                         )}
                       </div>

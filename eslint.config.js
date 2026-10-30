@@ -34,7 +34,7 @@ export default defineConfig([
     files: ['google_apps_script.js'],
     languageOptions: {
       sourceType: 'script',
-      globals: { SpreadsheetApp: 'readonly', ContentService: 'readonly', Utilities: 'readonly', PropertiesService: 'readonly', LockService: 'readonly' },
+      globals: { SpreadsheetApp: 'readonly', ContentService: 'readonly', Utilities: 'readonly', PropertiesService: 'readonly', LockService: 'readonly', console: 'readonly' },
     },
     rules: {
       // Apps Script invokes global doGet/doPost entry points externally.

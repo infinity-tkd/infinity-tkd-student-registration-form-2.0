@@ -25,7 +25,6 @@ async function main() {
     "fetch_locations.js",
     "src/data/locations.js",
     "src/data/schools.js",
-    "src/data/relationships.js",
   ]);
   const original = execFileSync("git", ["show", "HEAD:src/App.jsx"], {
     encoding: "utf8",
@@ -34,6 +33,9 @@ async function main() {
   const normalized = (source) =>
     source.replace(/['"\s]/g, "").replace(/,([}\]])/g, "$1");
   const apiSource = fs.readFileSync("src/utils/api.js", "utf8");
+  const { backendHarness } = await import("./helpers/backend-harness.mjs");
+  const { relationshipList } = await import("../src/data/relationships.js");
+  const { reliabilityCopy } = await import("../src/data/reliability.js");
   assert.match(apiSource, /method:\s*['"]POST['"]/);
   assert.match(apiSource, /new URLSearchParams\(payload\)/);
   assert.match(apiSource, /application\/x-www-form-urlencoded/);
@@ -87,12 +89,16 @@ async function main() {
     if (req.method() === "POST") {
       posts.push(Object.fromEntries(new URLSearchParams(req.postData())));
       if (responseType === "network") return route.abort("failed");
+      const backendResult = responseType === "success" ? backendHarness({blank:true}).request(posts.at(-1)) : null;
+      if (backendResult) assert.equal(backendResult.status, "success", `Real form payload rejected by backend: ${backendResult.code}`);
       return route.fulfill({
         headers: { "Access-Control-Allow-Origin": "*" },
         json:
           responseType === "success"
-            ? { status: "success" }
-            : { status: "error", message: "Simulated error" },
+            ? backendResult
+            : responseType === "validation"
+              ? { status: "error", code: "invalid_fields", uncertain: false }
+              : { status: "error", message: "Simulated error" },
       });
     }
     if (url.hostname !== "infinity.test") return route.abort();
@@ -172,7 +178,11 @@ async function main() {
   const emergency = async (minor) => {
     await page.locator("#emergencyContact").fill("陈 明");
     await page.locator("#emergencyPhone").fill("012345678");
-    await choose("relationship", "Parent");
+    if (minor) await choose("relationship", "Aunt");
+    else {
+      await page.locator("#relationship").fill("Older cousin");
+      await page.locator("#relationship").press("Enter");
+    }
     if (minor)
       assert.equal(await page.locator("#relationship-listbox").count(), 0);
   };
@@ -326,7 +336,7 @@ async function main() {
   await page.locator("#relationship").click();
   assert.equal(
     await page.locator('#relationship-listbox [role="option"]').count(),
-    2,
+    relationshipList.length,
   );
   await page.locator("#relationship").press("Escape");
   await emergency(true);
@@ -358,7 +368,7 @@ async function main() {
   await page.keyboard.press("Escape");
   assert.equal(await page.locator("#signature").inputValue(), "Sok Dara");
   record(
-    "Khmer minor/Olympic workflow, guardian-only options, required parent consent, failure modal, and preserved entries",
+    "Khmer minor/Olympic workflow, expanded emergency contacts, separate required parent consent, failure modal, and preserved entries",
   );
   responseType = "network";
   const postsAfterError = posts.length;
@@ -400,12 +410,22 @@ async function main() {
     await page.locator("#" + name).check();
   await page.locator("#howHear").selectOption("Google");
   await page.locator("#signature").fill("Sok Dara");
+  responseType = "validation";
+  const beforeValidation = posts.length;
+  await next();
+  await page.locator("dialog").waitFor();
+  assert.equal(posts.length, beforeValidation + 1);
+  assert.ok((await page.locator("dialog").textContent()).includes(reliabilityCopy.zh.reviewSubmission));
+  assert.equal(await page.locator("dialog .retry-confirmed").count(), 0);
+  await page.locator("dialog .button-primary").click();
+  assert.equal(await page.locator("#signature").inputValue(), "Sok Dara");
+  responseType = "success";
   await next();
   await page.locator("dialog").waitFor();
   await page.locator("dialog .button-primary").click();
   assert.equal(await page.locator("html").getAttribute("lang"), "zh-Hans");
   record(
-    "Chinese workflow completes with canonical English API values and localized interface",
+    "Chinese workflow/custom relationship passes the backend; confirmed validation rejection preserves entries and retries without a duplicate warning",
   );
 
   await page.locator("#langSwitcher").selectOption("en");

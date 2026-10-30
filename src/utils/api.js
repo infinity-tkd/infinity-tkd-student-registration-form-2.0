@@ -55,7 +55,13 @@ export async function submitRegistration(
       throw new RegistrationError("response", true);
     // Even a hardened backend can lose a response after a durable write.
     // Preserve the explicit retry guard for uncertain submission outcomes.
-    if (result.status !== "success") throw new RegistrationError("rejected", true);
+    if (result.status !== "success") {
+      const knownCodes = ["invalid_request", "invalid_fields", "consent_required", "busy", "paused", "configuration", "storage_unavailable", "capacity", "rate_limited", "sheet_schema", "write_uncertain", "unavailable"];
+      const serverCode = knownCodes.includes(result.code) ? result.code : undefined;
+      const error = new RegistrationError("rejected", !(serverCode && result.uncertain === false && serverCode !== "write_uncertain"));
+      error.serverCode = serverCode;
+      throw error;
+    }
     return result;
   } catch (error) {
     if (error instanceof RegistrationError) throw error;

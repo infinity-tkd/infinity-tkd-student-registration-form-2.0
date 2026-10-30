@@ -2,7 +2,7 @@
 
 ## Already deployed
 
-On 30 October 2026 the existing Apps Script web-app deployment was updated from Version 1 to **Version 3**, using the tested `google_apps_script.js`. Its URL did not change. The read-only readiness GET confirms revision `2026-10-30.1`, the existing spreadsheet binding and valid column headers. No registration records were read for testing, submitted, migrated, modified or deleted.
+On 30 October 2026 the existing Apps Script web-app deployment was updated from Version 1 to **Version 4**, using the tested `google_apps_script.js`. Its URL did not change. The read-only readiness GET confirms revision `2026-10-30.2`, the existing spreadsheet binding and valid column headers. No registration records were read for testing, submitted, migrated, modified or deleted.
 
 For later updates, replace the code in the existing bound project, save, and choose **Deploy → Manage deployments → Edit → New version → Deploy** for the same deployment ID. Keep its current execution identity and access settings. Do not use the editor's Run button to test registration. Source edits alone do not update a versioned deployment.
 
@@ -36,6 +36,8 @@ No hosting account/domain has been chosen or authenticated for this revision yet
 - Committed identical submissions deduplicate for seven days. Historic records are not retroactively indexed or rewritten. A changed field is a new request.
 - Never clear the receipt store or rotate/delete `INFINITY_V2_HASH_KEY` casually. Doing so defeats duplicate protection. Keep one API writer for this sheet; the script lock does not coordinate unrelated scripts or human edits.
 - A `write_uncertain` error requires operator review. A pending receipt identifies a reserved row number. Inspect that row through an authorized spreadsheet session before deciding whether an incomplete registration needs follow-up. A matching row is recovered automatically on an identical retry; a blank/mismatched row is never rewritten automatically. Do not delete the pending receipt until the outcome has been resolved and a duplicate has been ruled out.
+- `checkRegistrationSetup` is a metadata-only operator diagnostic: grid size, blank status, formats, validation/protection metadata and receipt counts; no personal fields are logged. `releaseUnwrittenAttempts` uses the script lock and marks only pending reservations older than ten minutes, beyond the last data row, and confirmed entirely blank as retryable. It preserves the receipt and leaves registration rows unchanged. Exact retries retain the existing rate allowance. It does not resend any registration or reset limits for unrelated requests.
+- New writes preserve existing formats, use actual dates/numbers for those fields, and escape literal text/phone zeroes. First-use empty tabs expand from 26 to 35 columns before header initialization. Do not add back a bulk text-format setter across typed table columns.
 - Storage limits, missing binding/key, schema errors and service failures stop safely with generic errors. Preserve the user's browser draft while investigating; do not ask them to repeatedly resubmit.
 - To roll back code, use Manage deployments to select the prior version of the same deployment. Version 1 has the old security gaps; rolling back is an emergency operational choice, not a security solution. A rollback does not undo registrations or clear receipts.
 
