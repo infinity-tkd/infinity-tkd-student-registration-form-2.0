@@ -9,10 +9,9 @@ import {
 } from "../src/utils/drafts.js";
 import { normalizeField, looksLikeFormula } from "../src/utils/input.js";
 import { securityHeaders, securityPolicy } from "../build/security.mjs";
-import { readFileSync } from "node:fs";
-import { createContext, runInContext } from "node:vm";
 import { ageOnDate } from "../src/utils/dates.js";
 import { reliabilityCopy } from "../src/data/reliability.js";
+import { readFileSync } from "node:fs";
 
 const today = new Date(2026, 9, 16);
 assert.equal(ageOnDate("2020-10-16", today), 6);
@@ -210,96 +209,18 @@ console.log(
   "PASS production CSP, redirect allowlist, framing headers, and HTTPS-only configuration",
 );
 
-const rows = [];
-const sheet = {
-  getLastRow: () => 1 + rows.length,
-  appendRow: (row) => rows.push(row),
-  autoResizeColumns() {},
-};
-const scriptContext = createContext({
-  SpreadsheetApp: {
-    getActiveSpreadsheet: () => ({ getSheetByName: () => sheet }),
-  },
-  ContentService: {
-    MimeType: { JSON: "application/json" },
-    createTextOutput: (text) => ({ setMimeType: () => text }),
-  },
-  Date,
-});
-runInContext(readFileSync("google_apps_script.js", "utf8"), scriptContext);
-scriptContext.testEvent = {
-  parameter: {
-    englishName: "Contract Test",
-    email: "test@example.com",
-    height: "175",
-    weight: "65",
-    branch: "Olympic",
-    medicalNotes: "None",
-    liabilityWaiver: "Agreed",
-  },
-};
-const backendResult = JSON.parse(
-  runInContext("doPost(testEvent)", scriptContext),
-);
-assert.equal(backendResult.status, "success");
-assert.equal(rows[0][1], "Contract Test");
-assert.equal(rows[0][7], "175");
-assert.equal(rows[0][8], "65");
-assert.equal(rows[0][22], "Olympic");
-assert.equal(rows[0][29], "Agreed");
-assert.equal(rows[0].length, 35);
-console.log(
-  "PASS unchanged Apps Script POST handler and spreadsheet column mapping in an isolated mock (no live writes)",
-);
-
-// A read can fail after the row was appended. The generic error response is
-// therefore ambiguous and must never enable an unchecked browser retry.
-let spreadsheetReads = 0;
-sheet.getLastRow = () => {
-  if (++spreadsheetReads === 1) return 1 + rows.length;
-  throw new Error("Simulated read failure after append");
-};
-const resultAfterWrite = JSON.parse(runInContext("doPost(testEvent)", scriptContext));
-assert.equal(rows.length, 2);
-assert.equal(resultAfterWrite.status, "error");
-Object.defineProperty(globalThis, "navigator", {
-  value: { onLine: true },
-  configurable: true,
-});
-globalThis.fetch = async () => ({ ok: true, json: async () => resultAfterWrite });
-await assert.rejects(
-  submitRegistration(endpoint, {}),
-  (error) => error.code === "rejected" && error.uncertain,
-);
-console.log("PASS backend error after a successful write still requires a checked retry");
-
-const initializedRows = [];
-let registrationSheet, deletedEmptySheet = false, frozenRows = 0;
-const headerRange = {};
-for (const method of ["setFontWeight", "setBackground", "setFontColor", "setHorizontalAlignment", "setFontFamily"])
-  headerRange[method] = () => headerRange;
-const blankSheet = {
-  getLastRow: () => initializedRows.length,
-  appendRow: (row) => initializedRows.push(row),
-  getRange: () => headerRange,
-  setFrozenRows: (count) => { frozenRows = count; },
-  autoResizeColumns() { throw new Error("Resize unavailable"); },
-};
-const emptyDefaultSheet = { getLastRow: () => 0 };
-scriptContext.SpreadsheetApp.getActiveSpreadsheet = () => ({
-  getSheetByName: (name) => name === "Registrations" ? registrationSheet : emptyDefaultSheet,
-  insertSheet: () => { registrationSheet = blankSheet; return blankSheet; },
-  deleteSheet: (target) => { deletedEmptySheet = target === emptyDefaultSheet; },
-});
-const firstRegistration = JSON.parse(runInContext("doPost(testEvent)", scriptContext));
-assert.equal(firstRegistration.status, "success");
-assert.equal(firstRegistration.row, 2);
-assert.equal(initializedRows.length, 2);
-assert.equal(initializedRows[0].length, 35);
-assert.equal(initializedRows[0][7], "Height (cm)");
-assert.equal(initializedRows[0][8], "Weight (kg)");
-assert.equal(initializedRows[1][7], "175");
-assert.equal(initializedRows[1][8], "65");
-assert.equal(frozenRows, 1);
-assert.equal(deletedEmptySheet, true);
-console.log("PASS first-registration sheet/header initialization and nonfatal resize errors in an isolated mock");
+// Exercise the actual build plugin's hosting output, not a duplicate policy.
+const { securityPlugin } = await import("../build/security.mjs");
+const emitted = new Map();
+securityPlugin({}).generateBundle.call({ emitFile: file => emitted.set(file.fileName, file.source) });
+const headerRules = emitted.get("_headers");
+for (const [name, value] of Object.entries(securityHeaders()))
+  assert.ok(headerRules.includes(`  ${name}: ${value}\n`));
+assert.ok(headerRules.includes("/sw.js\n  Cache-Control: no-cache"));
+assert.ok(headerRules.includes("/assets/*\n  Cache-Control: public, max-age=31536000, immutable"));
+assert.ok(headerRules.split("\n").every(line => line.length < 2000));
+const hosting = JSON.parse(readFileSync("wrangler.jsonc", "utf8"));
+assert.equal(hosting.assets.directory, "./dist");
+assert.equal(hosting.assets.not_found_handling, "404-page");
+assert.equal(hosting.main, undefined); // Static assets use _headers; no Worker bypass.
+console.log("PASS emitted host-enforced headers, safe worker caching and Cloudflare static hosting configuration");

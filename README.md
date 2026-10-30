@@ -62,7 +62,8 @@ A high-fidelity, premium, and interactive student registration web application b
 │   ├── App.jsx                 # Core wizard controller & form pages
 │   ├── index.css               # Tailwind theme setup and global utilities
 │   └── main.jsx                # DOM entry point
-├── google_apps_script.js       # Existing backend; separate hardening still required
+├── google_apps_script.js       # Validated, locked, duplicate-protected Apps Script API
+├── BACKEND_DEPLOYMENT.md       # Deployment, hosting and operations guide
 ├── SECURITY_RELIABILITY.md     # Security findings and deployment conditions
 ├── index.html                  # HTML template
 ├── package.json                # Project dependencies and script runner
@@ -106,7 +107,7 @@ Use `npm run preview` to inspect the build over HTTP at `http://127.0.0.1:4173`.
 ## 🗃️ Google Sheets Database Setup
 
 To hook the form to your Google Sheet:
-1. Open a blank Google Sheet, go to **Extensions** -> **Apps Script**.
+1. For an existing deployment, follow [BACKEND_DEPLOYMENT.md](BACKEND_DEPLOYMENT.md) and keep its spreadsheet and URL. For a new isolated setup, open a blank Google Sheet and go to **Extensions** -> **Apps Script**.
 2. Replace default code with the contents of [google_apps_script.js](google_apps_script.js) and save.
 3. Click **Deploy** -> **New Deployment**. Select **Web App**.
    * Execute as: **Me**
@@ -122,8 +123,8 @@ The endpoint URL is public frontend configuration, not a secret. See [SECURITY_R
 
 ## Production verification
 
-Run `npm run check` for frontend/tooling lint, isolated reliability tests and a production build. Browser verification uses `npm run test:frontend`, `npm run test:offline`, and `npm run test:serving` with Playwright and installed Chrome; every registration POST is intercepted. The offline suite covers actual service workers, tab reopening and version updates. The serving suite checks Vite's production response headers and a simulated Google redirect through the browser. Set `PLAYWRIGHT_MODULE` when using a shared Playwright installation and `FRONTEND_ARTIFACT_DIR` to select a report directory.
+Run `npm run check` for full repository lint, isolated reliability/backend security tests and a production build. Browser verification uses `npm run test:frontend`, `npm run test:offline`, and `npm run test:serving` with Playwright and installed Chrome; every registration POST is intercepted. The offline suite covers actual service workers, tab reopening and version updates. The serving suite checks Vite's production response headers and a simulated Google redirect through the browser. Set `PLAYWRIGHT_MODULE` when using a shared Playwright installation and `FRONTEND_ARTIFACT_DIR` to select a report directory.
 
-The frontend checks do not certify the deployed API. Live write tests were declined and no test registrations were created. Server validation, safe spreadsheet writes and idempotency remain necessary in the unchanged backend. GitHub Pages applies the HTML meta CSP but does not consume the emitted custom `_headers` file; use hosting/proxy configuration to enforce all response headers. Set the repository Actions variable `VITE_GAS_WEB_APP_URL` before deploying.
+The hardened backend was deployed as Version 3 on 30 October 2026 and its read-only health endpoint confirms revision `2026-10-30.1`. Server validation, literal spreadsheet writes, durable duplicate receipts, locking, request limits and generic errors are implemented. Live write tests were declined and no test registrations were created. See [SECURITY_RELIABILITY.md](SECURITY_RELIABILITY.md) for the test boundaries and operational limits.
 
-Repository-wide `npm run lint` also recognizes Apps Script and Node environments. Its remaining warning identifies the existing backend's unused CORS configuration; it is documented rather than treated as a working CORS control.
+GitHub Pages applies the HTML meta CSP but does not enforce `_headers`. The prepared `wrangler.jsonc` publishes `dist/` on Cloudflare Static Assets, where the header rules are supported. Hosting account/domain selection is still pending. Set `VITE_GAS_WEB_APP_URL` in the chosen build environment and run `npm run verify:deployment -- https://YOUR-SITE/ https://script.google.com/macros/s/DEPLOYMENT/exec` after publishing; this GET-only gate fails if security headers, assets or the backend health revision are missing. `npm run check` now includes full repository lint and `npm run test:backend` in addition to reliability tests and the build.

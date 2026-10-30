@@ -53,8 +53,8 @@ export async function submitRegistration(
       !["success", "error"].includes(result.status)
     )
       throw new RegistrationError("response", true);
-    // The existing backend can catch an error after appendRow has succeeded.
-    // Its generic error response does not guarantee that nothing was written.
+    // Even a hardened backend can lose a response after a durable write.
+    // Preserve the explicit retry guard for uncertain submission outcomes.
     if (result.status !== "success") throw new RegistrationError("rejected", true);
     return result;
   } catch (error) {

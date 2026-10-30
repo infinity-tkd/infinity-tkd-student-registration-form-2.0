@@ -77,7 +77,7 @@ export function securityPlugin(options) {
           Object.entries(headers)
             .map(([key, value]) => `  ${key}: ${value}`)
             .join("\n") +
-          "\n",
+          "\n\n/\n  Cache-Control: no-cache\n\n/*.html\n  Cache-Control: no-cache\n\n/sw.js\n  Cache-Control: no-cache\n\n/manifest.webmanifest\n  Cache-Control: no-cache\n\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n",
       });
       this.emitFile({
         type: "asset",

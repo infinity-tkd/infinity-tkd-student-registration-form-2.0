@@ -39,10 +39,14 @@ The browser checks cover:
 - Dialog keyboard focus, Escape dismissal, and language/theme persistence.
 - English, Khmer, and Chinese at 320, 390, 768, 1024, and 1440 pixels in both themes: 30 combinations without horizontal page overflow on the initial form.
 - Persistent accessible labels, reduced motion, self-hosted font loading, text-color contrast at least 4.5:1 for the main theme tokens, and no browser runtime exceptions.
-- An automated comparison that protects backend files, data files, payload keys, and the request method/encoding.
+- An automated comparison that protects data files, browser payload keys, and the request method/encoding. Backend security is now tested separately.
 
 The 16 October production review also fixed impossible calendar-date acceptance, preserved literal comparison text in medical notes, and guarded retries after generic backend errors that may follow a successful write. The backend source remains untouched. The application and React runtime now build as separate chunks (about 91.4 kB and 59.7 kB gzip), removing the large-chunk advisory without raising the warning threshold. The external theme script resolves correctly through Vite's public-asset handling, including subdirectory deployments.
 
 `npm run check` validates frontend/tooling lint, storage, expiry, calendar-date and age boundaries, API failures, timeout, security policy, and production compilation. Repository-wide lint recognizes Apps Script globals and leaves one documented warning for its unused local CORS object. `npm run test:offline` checks a real service worker, complete browser recovery, preserved medical comparison text, invalid restored dates, and checked retries. Physical-device testing, assistive-technology testing, and native-speaker copy review remain outside these local browser checks.
 
 The 17 October follow-up also verifies worker updates without forcing an active form to refresh, activation after tab closure, old-cache cleanup, and recovery after the update while offline. `npm run test:serving` checks the actual Vite production server and a completely intercepted Google-style redirect through the browser. It confirms all 34 registration fields remain compatible and clears drafts on success. All tests leave live registration data untouched; the live API and backend hardening conditions remain open in the security review.
+
+## 30 October security follow-up
+
+The backend is now hardened and deployed as Version 3. The 16/17 October notes above describe the earlier frontend-only scope. The current release conditions, tests and hosting status are documented in SECURITY_RELIABILITY.md and BACKEND_DEPLOYMENT.md. Browser payload fields and UI behavior are preserved; backend security scenarios run separately in the mandatory check command. Custom response headers still require deployment to a compatible host.

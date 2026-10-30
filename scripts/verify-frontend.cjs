@@ -17,12 +17,11 @@ fs.mkdirSync(artifactDir, { recursive: true });
 let browser;
 
 async function main() {
-  // Check the exact API contract and backend files against the starting revision.
+  // Backend hardening is covered separately; preserve browser fields and datasets.
   execFileSync("git", [
     "diff",
     "--exit-code",
     "--",
-    "google_apps_script.js",
     "fetch_locations.js",
     "src/data/locations.js",
     "src/data/schools.js",
@@ -46,7 +45,7 @@ async function main() {
     normalized(initialState(original)),
   );
   record(
-    "Backend, datasets, request URL/method/encoding, and all payload keys unchanged",
+    "Datasets, browser request URL/method/encoding, and all payload keys unchanged",
   );
 
   const { pathToFileURL } = require("node:url");

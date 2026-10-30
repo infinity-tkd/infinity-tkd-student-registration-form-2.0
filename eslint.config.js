@@ -34,12 +34,11 @@ export default defineConfig([
     files: ['google_apps_script.js'],
     languageOptions: {
       sourceType: 'script',
-      globals: { SpreadsheetApp: 'readonly', ContentService: 'readonly' },
+      globals: { SpreadsheetApp: 'readonly', ContentService: 'readonly', Utilities: 'readonly', PropertiesService: 'readonly', LockService: 'readonly' },
     },
     rules: {
-      // Apps Script invokes global handlers. Keep its unused local CORS object
-      // visible as a backend warning; this frontend change does not fix it.
-      'no-unused-vars': ['warn', { vars: 'local', args: 'none', caughtErrors: 'none' }],
+      // Apps Script invokes global doGet/doPost entry points externally.
+      'no-unused-vars': ['error', { vars: 'local', args: 'none', caughtErrors: 'none' }],
     },
   },
 ])
